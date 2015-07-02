@@ -137,54 +137,193 @@ class TSL2561(object):
 
         self._disable()
 
+    # def read_lux_2(self):
+    #
+    #     ch0, ch1 = self.read_raw_luminosity()
+    #     lux = 0.0
+    #
+    #     if ch0 == 0:
+    #         return lux
+    #
+    #     ch0 = float(ch0)
+    #     ch1 = float(ch1)
+    #
+    #     if self._integration_time == 13:
+    #         ch0 /= 0.034
+    #         ch1 /= 0.034
+    #     elif self._integration_time == 101:
+    #         ch0 /= 0.252
+    #         ch1 /= 0.252
+    #
+    #     if self._gain == 16:
+    #         ch0 /= 16
+    #         ch1 /= 16
+    #
+    #     ratio = ch1 / ch0
+    #
+    #     self._logger.debug(' gain={:d}x, integration time={:.2f} ms'.format(self._gain, self._integration_time))
+    #     self._logger.debug(' ch0={:.2f}, ch1={:.2f}, ratio={:.2f}'.format(ch0, ch1, ratio))
+    #
+    #     if self._package & 0x10:
+    #         if 0 < ratio <= 0.52:
+    #             lux = 0.0315 * ch0 - 0.0593 * ch0 * (ratio ** 1.4)
+    #         elif 0.52 < ratio <= 0.65:
+    #             lux = 0.0229 * ch0 - 0.0291 * ch1
+    #         elif 0.65 < ratio <= 0.80:
+    #             lux = 0.0157 * ch0 - 0.0180 * ch1
+    #         elif 0.80 < ratio <= 1.30:
+    #             lux = 0.00338 * ch0 - 0.00260 * ch1
+    #         elif ratio > 1.30:
+    #             lux = 0.0
+    #     else:
+    #         if 0 < ratio <= 0.5:
+    #             lux = 0.0304 * ch0 - 0.062 * ch0 * (ratio ** 1.4)
+    #         elif 0.5 < ratio <= 0.61:
+    #             lux = 0.0224 * ch0 - 0.031 * ch1
+    #         elif 0.61 < ratio <= 0.80:
+    #             lux = 0.0128 * ch0 - 0.0153 * ch1
+    #         elif 0.80 < ratio <= 1.30:
+    #             lux = 0.00146 * ch0 - 0.00112 * ch1
+    #         elif ratio > 1.30:
+    #             lux = 0.0
+    #
+    #     return lux
+
     def read_lux(self):
+        LUX_SCALE = 14
+        RATIO_SCALE = 9
+        CH_SCALE = 10
+        CHSCALE_TINT0 = 0x7517
+        CHSCALE_TINT1 = 0x0fe7
 
-        ch0, ch1 = self.read_raw_luminosity()
-        lux = 0.0
+        K1T = 0x0040
+        B1T = 0x01f2
+        M1T = 0x01be
+        K2T = 0x0080
+        B2T = 0x0214
+        M2T = 0x02d1
+        K3T = 0x00c0
+        B3T = 0x023f
+        M3T = 0x037b
+        K4T = 0x0100
+        B4T = 0x0270
+        M4T = 0x03fe
+        K5T = 0x0138
+        B5T = 0x016f
+        M5T = 0x01fc
+        K6T = 0x019a
+        B6T = 0x00d2
+        M6T = 0x00fb
+        K7T = 0x029a
+        B7T = 0x0018
+        M7T = 0x0012
+        K8T = 0x029a
+        B8T = 0x0000
+        M8T = 0x0000
 
-        if ch0 == 0:
-            return lux
+        K1C = 0x0043
+        B1C = 0x0204
+        M1C = 0x01ad
+        K2C = 0x0085
+        B2C = 0x0228
+        M2C = 0x02c1
+        K3C = 0x00c8
+        B3C = 0x0253
+        M3C = 0x0363
+        K4C = 0x010a
+        B4C = 0x0282
+        M4C = 0x03df
+        K5C = 0x014d
+        B5C = 0x0177
+        M5C = 0x01dd
+        K6C = 0x019a
+        B6C = 0x0101
+        M6C = 0x0127
+        K7C = 0x029a
+        B7C = 0x0037
+        M7C = 0x002b
+        K8C = 0x029a
+        B8C = 0x0000
+        M8C = 0x0000
 
-        ch0 = float(ch0)
-        ch1 = float(ch1)
+        chScale = 1 << CH_SCALE
+        ratio1 = 0
+        b = 0
+        m = 0
 
         if self._integration_time == 13:
-            ch0 /= 0.034
-            ch1 /= 0.034
+                chScale = CHSCALE_TINT0
         elif self._integration_time == 101:
-            ch0 /= 0.252
-            ch1 /= 0.252
+                chScale = CHSCALE_TINT1
 
-        if self._gain == 16:
-            ch0 /= 16
-            ch1 /= 16
+        if self._gain != 16:
+            chScale <<= 4
 
-        ratio = ch1 / ch0
+        ch0, ch1 = self.read_raw_luminosity()
 
-        self._logger.debug(' gain={:d}x, integration time={:.2f} ms'.format(self._gain, self._integration_time))
-        self._logger.debug(' ch0={:.2f}, ch1={:.2f}, ratio={:.2f}'.format(ch0, ch1, ratio))
+        channel0 = (ch0 * chScale) >> CH_SCALE
+        channel1 = (ch1 * chScale) >> CH_SCALE
+
+        if channel0 != 0:
+            ratio1 = (channel1 << (RATIO_SCALE+1)) / channel0
+
+        ratio = (ratio1 + 1) >> 1
 
         if self._package & 0x10:
-            if 0 < ratio <= 0.52:
-                lux = 0.0315 * ch0 - 0.0593 * ch0 * (ratio ** 1.4)
-            elif 0.52 < ratio <= 0.65:
-                lux = 0.0229 * ch0 - 0.0291 * ch1
-            elif 0.65 < ratio <= 0.80:
-                lux = 0.0157 * ch0 - 0.0180 * ch1
-            elif 0.80 < ratio <= 1.30:
-                lux = 0.00338 * ch0 - 0.00260 * ch1
-            elif ratio > 1.30:
-                lux = 0.0
+            if (ratio >= 0) and (ratio <= K1C):
+                b = B1C
+                m = M1C
+            elif ratio <= K2C:
+                b = B2C
+                m = M2C
+            elif ratio <= K3C:
+                b = B3C
+                m = M3C
+            elif ratio <= K4C:
+                b = B4C
+                m = M4C
+            elif ratio <= K5C:
+                b = B5C
+                m = M5C
+            elif ratio <= K6C:
+                b = B6C
+                m = M6C
+            elif ratio <= K7C:
+                b = B7C
+                m = M7C
         else:
-            if 0 < ratio <= 0.5:
-                lux = 0.0304 * ch0 - 0.062 * ch0 * (ratio ** 1.4)
-            elif 0.5 < ratio <= 0.61:
-                lux = 0.0224 * ch0 - 0.031 * ch1
-            elif 0.61 < ratio <= 0.80:
-                lux = 0.0128 * ch0 - 0.0153 * ch1
-            elif 0.80 < ratio <= 1.30:
-                lux = 0.00146 * ch0 - 0.00112 * ch1
-            elif ratio > 1.30:
-                lux = 0.0
+            if (ratio >= 0) and (ratio <= K1T):
+                b = B1T
+                m = M1T
+            elif ratio <= K2T:
+                b = B2T
+                m = M2T
+            elif ratio <= K3T:
+                b = B3T
+                m = M3T
+            elif ratio <= K4T:
+                b = B4T
+                m = M4T
+            elif ratio <= K5T:
+                b = B5T
+                m = M5T
+            elif ratio <= K6T:
+                b = B6T
+                m = M6T
+            elif ratio <= K7T:
+                b = B7T
+                m = M7T
+            elif ratio > K8T:
+                b = B8T
+                m = M8T
+
+        temp = (channel0 * b) - (channel1 * m)
+
+        if temp < 0:
+                temp = 0
+
+        temp += (1 << (LUX_SCALE-1))
+
+        lux = temp >> LUX_SCALE
 
         return lux
